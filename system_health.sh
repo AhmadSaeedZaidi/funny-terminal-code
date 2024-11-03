@@ -7,85 +7,82 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Thresholds
-CPU_THRESHOLD=80
-MEM_THRESHOLD=70
-DISK_THRESHOLD=80
+# Function to check top 5 CPU-consuming processes and calculate total CPU usage
+check_cpu_usage() {
+    echo -e "${YELLOW}Top 5 CPU-Consuming Processes:${NC}"
+    echo "----------------------------------------"
 
-# Function to check CPU usage
-check_cpu() {
-    CPU_USAGE=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}')
-    CPU_USAGE=${CPU_USAGE%.*} # Remove decimal
-
-    if [ "$CPU_USAGE" -ge "$CPU_THRESHOLD" ]; then
-        echo -e "${RED}CPU Usage: ${CPU_USAGE}% (High)${NC}"
-    else
-        echo -e "${GREEN}CPU Usage: ${CPU_USAGE}% (Normal)${NC}"
-    fi
+    # Get top 5 CPU-consuming processes and calculate total CPU usage
+    echo -e "USER       PID  %CPU  COMMAND"
+    #i honestly dont even know what this is, it wasnt working and i asked gpt for help
+    ps aux --sort=-%cpu | awk 'NR>1 {printf "%-10s %-5s %-5s %s\n", $1, $2, $3, $11}' | head -n 5
+    echo "----------------------------------------"
+    
+    # Calculate and print total CPU usage
+    total_cpu=$(ps aux --sort=-%cpu | awk 'NR>1 {total+=$3} END {print total}' | head -n 1)
+    echo -e "${GREEN}Total CPU Usage of Top 5 Processes: ${total_cpu}%${NC}"
+    echo
 }
 
-# Function to check Memory usage
-check_memory() {
-    MEM_USAGE=$(free | grep Mem | awk '{print $3/$2 * 100.0}')
-    MEM_USAGE=${MEM_USAGE%.*} # Remove decimal
-
-    if [ "$MEM_USAGE" -ge "$MEM_THRESHOLD" ]; then
-        echo -e "${RED}Memory Usage: ${MEM_USAGE}% (High)${NC}"
-    else
-        echo -e "${GREEN}Memory Usage: ${MEM_USAGE}% (Normal)${NC}"
-    fi
-}
-
-# Function to check Disk usage
-check_disk() {
-    DISK_USAGE=$(df / | grep / | awk '{ print $5 }' | sed 's/%//g')
-
-    if [ "$DISK_USAGE" -ge "$DISK_THRESHOLD" ]; then
-        echo -e "${RED}Disk Usage: ${DISK_USAGE}% (High)${NC}"
-    else
-        echo -e "${GREEN}Disk Usage: ${DISK_USAGE}% (Normal)${NC}"
-    fi
-}
-
-# Function to check Network usage
-check_network() {
-    ifstat -S 1 1 | tail -n +3 | awk '{printf "TX: %s KB/s, RX: %s KB/s\n", $1, $2}' | while read line; do
-        echo -e "${YELLOW}Network Usage: $line${NC}"
-    done
-}
-
-# Function to display the top 5 memory-consuming processes
-check_top_processes() {
+# Function to check top 5 memory-consuming processes
+check_memory_usage() {
     echo -e "${YELLOW}Top 5 Memory-Consuming Processes:${NC}"
     echo "----------------------------------------"
-    ps -eo pid,comm,%mem --sort=-%mem | head -n 6 | awk '{printf "%-8s %-30s %-10s\n", $1, $2, $3}'
+
+    # Print top 5 memory-consuming processes
+    echo -e "USER       PID  %MEM  COMMAND"
+    ps aux --sort=-%mem | awk 'NR>1 {printf "%-10s %-5s %-5s %s\n", $1, $2, $4, $11}' | head -n 5
+    echo
+}
+
+# Function to check disk usage
+check_disk_usage() {
+    echo -e "${YELLOW}Disk Usage:${NC}"
     echo "----------------------------------------"
+
+    # Get the disk usage for the root partition
+    df -h / | awk 'NR==2 {print "Filesystem:", $1, "| Size:", $2, "| Used:", $3, "| Available:", $4, "| Use%:", $5}'
+    echo
 }
 
 # Function to check system uptime
 check_uptime() {
-    UPTIME=$(uptime -p)
-    echo -e "${BLUE}System Uptime: $UPTIME${NC}"
+    echo -e "${YELLOW}System Uptime:${NC}"
+    echo "----------------------------------------"
+
+    # Print system uptime
+    uptime -p
+    echo
 }
 
-# Function to display health report
-display_health_report() {
-    echo -e "${YELLOW}System Health Report${NC}"
+# Function to check network connectivity by pinging common websites
+check_network_connectivity() {
+    echo -e "${YELLOW}Network Connectivity:${NC}"
     echo "----------------------------------------"
-    printf "%-20s %-10s\n" "Component" "Status"
-    printf "%-20s %-10s\n" "CPU" "$(check_cpu)"
-    printf "%-20s %-10s\n" "Memory" "$(check_memory)"
-    printf "%-20s %-10s\n" "Disk" "$(check_disk)"
-    check_network
-    check_top_processes
-    printf "%-20s %-10s\n" "Uptime" "$(check_uptime)"
+
+    # Ping Google, Amazon, and localhost
+    for site in "google.com" "amazon.com" "localhost"; do
+        ping -c 1 $site &> /dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}$site is reachable.${NC}"
+        else
+            echo -e "${RED}$site is unreachable.${NC}"
+        fi
+    done
+    echo -e "${YELLOW}Network Adapters:${NC}"
     echo "----------------------------------------"
+    ip addr show | awk '/^[0-9]+: / {print $2}' | sed 's/://' 
 }
 
-# Main function to run the health checks
+# Main function to run all checks
 main() {
-    display_health_report
+    check_cpu_usage
+    check_memory_usage
+    check_disk_usage
+    check_uptime
+    check_network_connectivity
 }
 
 # Execute the main function
 main
+
